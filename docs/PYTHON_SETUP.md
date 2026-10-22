@@ -1,14 +1,14 @@
 # Python Setup — Trading Research (Mac M1 / Apple Silicon)
 
-This project uses **uv project mode** to manage Python, dependencies, and the local virtual environment. The initial research workflow is **MetaTrader 5 CSV export → pandas → Parquet → backtesting**. Docker, Windows, and third-party MT5 bridges are not needed for this phase.
+This project uses **uv project mode** to manage Python, dependencies, and the local virtual environment.
 
-**Source of truth:** `pyproject.toml` defines the project's direct dependencies; `uv.lock` records the resolved dependency set; `.python-version` selects Python 3.12. **Do not manually maintain `requirements.txt`** for normal development. Export one only if another tool specifically requires it.
+**Source of truth:** `pyproject.toml` defines the project's direct dependencies; `uv.lock` records the resolved dependency set; `.python-version` selects Python 3.11. **Do not manually maintain `requirements.txt`** for normal development. Export one only if another tool specifically requires it.
 
 ## 1. Project files
 
 | File or directory | Purpose | Git? |
 |---|---|---|
-| `.python-version` | Preferred Python version (`3.12`) | Yes |
+| `.python-version` | Preferred Python version (`3.11`) | Yes |
 | `pyproject.toml` | Project metadata, Python compatibility, direct and development dependencies | Yes |
 | `uv.lock` | Resolved dependency lockfile for reproducible installations | Yes |
 | `.venv/` | Machine-local Python environment created by uv | **No** |
@@ -32,7 +32,7 @@ If the project **does not yet contain** `pyproject.toml`:
 
 ```bash
 uv init --bare              # initialize project metadata without sample application code
-uv python pin 3.12          # create/update .python-version
+uv python pin 3.11          # create/update .python-version
 uv add pandas numpy pyarrow matplotlib backtesting pyyaml
 uv add --dev pytest jupyterlab
 uv sync                    # create/update .venv and uv.lock
@@ -41,7 +41,7 @@ uv sync                    # create/update .venv and uv.lock
 `uv` may install the selected Python version automatically. To install it explicitly:
 
 ```bash
-uv python install 3.12
+uv python install 3.11
 ```
 
 **Existing repository warning:** if `pyproject.toml` and `uv.lock` already exist, **do not reinitialize** or replace them; follow the clone/reinstall instructions below.
@@ -119,7 +119,7 @@ uv sync --locked             # recreates .venv using .python-version + uv.lock
 uv run pytest
 ```
 
-For a new Mac, install `uv`, clone the project, and run `uv sync --locked`. **Do not delete** `src/`, `data/`, notebooks, or `uv.lock`. If Python 3.12 is unavailable, `uv` can download it; `uv python install 3.12` is also available explicitly.
+For a new Mac, install `uv`, clone the project, and run `uv sync --locked`. **Do not delete** `src/`, `data/`, notebooks, or `uv.lock`. If Python 3.11 is unavailable, `uv` can download it; `uv python install 3.11` is also available explicitly.
 
 If you changed `pyproject.toml` on purpose but haven't updated the lock yet, run `uv lock` and then `uv sync` (not `--locked`).
 
@@ -130,16 +130,16 @@ If you changed `pyproject.toml` on purpose but haven't updated the lock yet, run
 Generate:
 
 ```bash
-uv python pin 3.12
+uv python pin 3.11
 ```
 
 Its contents should be:
 
 ```text
-3.12
+3.11
 ```
 
-The minor-version pin allows current Python 3.12 patch releases. For even stricter interpreter reproducibility, pin an explicit patch version.
+The minor-version pin allows current Python 3.11 patch releases. For even stricter interpreter reproducibility, pin an explicit patch version.
 
 ### `pyproject.toml`
 
@@ -150,7 +150,7 @@ The recommended approach is to **let `uv add` write dependencies**, rather than 
 name = "trading-research"
 version = "0.1.0"
 description = "Historical market-data research and ADR strategy backtesting"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "backtesting",
     "matplotlib",
@@ -218,7 +218,7 @@ results/
 | Symptom | Check / solution |
 |---|---|
 | `uv: command not found` | Install `uv` with `brew install uv`, then open a new Terminal session. |
-| Wrong Python version | Check `.python-version`; run `uv run python --version` and `uv python install 3.12`. |
+| Wrong Python version | Check `.python-version`; run `uv run python --version` and `uv python install 3.11`. |
 | Package import missing | Ensure package is declared via `uv add <package>`; run `uv sync`. |
 | Environment seems corrupted | Run `rm -rf .venv && uv sync --locked` in the repository root. |
 | `uv sync --locked` fails | Your `pyproject.toml` and `uv.lock` disagree; run `uv lock`, inspect the changes, then `uv sync`. |
@@ -232,7 +232,7 @@ results/
 # New project (once)
 brew install uv
 uv init --bare
-uv python pin 3.12
+uv python pin 3.11
 uv add pandas numpy pyarrow matplotlib backtesting pyyaml
 uv add --dev pytest jupyterlab
 uv sync
@@ -253,5 +253,17 @@ rm -rf .venv && uv sync --locked
 ```
 
 **Current scope:** offline analysis and backtesting using exported MT5 historical candles. Real-time feeds, the Windows-only official `MetaTrader5` integration, and automated trade execution are separate later-stage decisions.
+
+### Daily commands
+
+| Action                  | Command                                 |
+| ----------------------- | --------------------------------------- |
+| Run Python script       | `uv run python src/main.py`             |
+| Run tests               | `uv run pytest`                         |
+| Add dependency          | `uv add plotly`                         |
+| Remove dependency       | `uv remove plotly`                      |
+| Synchronize environment | `uv sync`                               |
+| Update dependencies     | `uv lock --upgrade` then `uv sync`      |
+| Reinstall from scratch  | Delete `.venv`, then `uv sync --locked` |
 
 References: [uv project guide](https://docs.astral.sh/uv/guides/projects/), [uv CLI reference](https://docs.astral.sh/uv/reference/cli/), [uv pip compatibility and exports](https://docs.astral.sh/uv/concepts/projects/sync/).
