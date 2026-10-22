@@ -1,6 +1,6 @@
 # Systematic Trading Research & Automation
 
-> **Status: Research / prototype.** No live strategy or profitable trading edge has been validated yet. This repository is intended to research, backtest, and eventually automate systematic trading strategies — not to present historical examples as investment results.
+> **Status: Research / prototype.** No live strategy or profitable trading edge has been validated yet. This repository is intended to research, backtest, and eventually automate systematic trading strategies—not to present historical examples as investment results.
 
 ## 1. Project objective
 
@@ -99,11 +99,65 @@ For each instrument and session definition, measure:
 
 ## 5. Data sources and quality requirements
 
-### Preferred source
+### First approach — MT5 manual CSV export on macOS (Apple Silicon M1)
 
-**MetaTrader 5 Python integration** (`MetaTrader5`) with historical data from the intended broker account, if the account/platform supports MT5. Retrieve session-relevant **M5 or M1 candles** for fast research and use **historical bid/ask ticks** where available for execution validation.
+**Current default: MT5 → CSV → pandas → Parquet → offline research/backtesting.** The initial priority is historical data, not up-to-the-minute candles or automated trading. This is the fastest low-complexity approach on a Mac M1: **no Docker, Wine-based Python bridge, Windows virtual machine, or third-party MT5 Python package required**. MT5 itself must be installed and able to access historical data from the intended broker.
 
-The official Python integration connects to an installed desktop MT5 terminal (generally a Windows environment); a macOS-only setup may require a Windows environment or an alternate data ingestion method. Historical availability depends on the broker, account, and terminal history settings.
+1. In the macOS MetaTrader 5 terminal, go to **View → Symbols → Bars** (interface wording can vary by terminal build).
+2. Choose the broker's exact symbol (begin with **US100**), select **M5**, choose a historical date range, click **Request** if available, then **Export** to CSV. Aim for **2–3 years** if your broker provides it; otherwise start with available history. Later, retrieve **M1** or historical ticks to resolve ambiguous intrabar fills.
+3. Save the untouched export in `data/raw/`, e.g. `data/raw/US100_M5.csv`. Record the broker, symbol, export date, timeframe, and **the time-zone convention actually used by the terminal**; do not assume exported timestamps are UTC.
+4. Use a **native ARM64 Python environment** on your M1, import the CSV, validate the bars, then store a processed Parquet copy in `data/processed/`.
+5. Run ADR research and early backtests locally. Refresh manually only when newer history becomes necessary.
+
+Install minimal Python dependencies:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install pandas pyarrow
+```
+
+Example loader for a typical **tab-separated MT5 Bars export** with `<DATE>`, `<TIME>`, `<OPEN>`, `<HIGH>`, `<LOW>`, `<CLOSE>`, and volume/spread columns (inspect your own file first; some exports use other delimiters):
+
+```python
+from pathlib import Path
+import pandas as pd
+
+raw = Path("data/raw/US100_M5.csv")
+out = Path("data/processed/US100_M5.parquet")
+out.parent.mkdir(parents=True, exist_ok=True)
+
+# sep=None lets pandas infer tab/comma/semicolon delimiters for this small import.
+df = pd.read_csv(raw, sep=None, engine="python")
+df.columns = df.columns.str.strip().str.strip("<>").str.lower()
+
+required = {"date", "time", "open", "high", "low", "close"}
+missing = required - set(df.columns)
+if missing:
+    raise ValueError(f"Missing MT5 columns: {sorted(missing)}; found {list(df.columns)}")
+
+df["datetime"] = pd.to_datetime(
+    df["date"].astype(str) + " " + df["time"].astype(str),
+    format="%Y.%m.%d %H:%M:%S",
+    errors="raise",
+)
+df = df.set_index("datetime").sort_index()
+if df.index.has_duplicates:
+    raise ValueError("Duplicate candle timestamps; inspect the original export")
+if df[["open", "high", "low", "close"]].isna().any().any():
+    raise ValueError("Missing OHLC values")
+
+# Index timestamps remain naive pending explicit broker/terminal timezone validation.
+# Localize/convert only after confirming their original timezone.
+df.to_parquet(out)
+print(f"Saved {len(df):,} bars to {out}")
+```
+
+**Limits:** M5 bars do not reveal which of SL/TP was hit first when both fall inside a candle; exported bars may not include executable bid/ask or complete historical spreads. Validate strategy sensitivity to costs and ambiguous fills before drawing profitability conclusions.
+
+### Later upgrade — automated MT5 data retrieval
+
+If repeated data updates or automated execution become necessary, evaluate **official `MetaTrader5` Python integration with an MT5 terminal on Windows** (VM/VPS) to retrieve M5/M1 candles and available bid/ask ticks. The official integration does not run natively on macOS; Wine/Docker/third-party bridges on M1 add substantial compatibility and security complexity. Do **not** make these dependencies part of the initial research milestone.
 
 ### Alternatives
 
@@ -124,7 +178,7 @@ Check duplicate/missing bars, timestamp shifts, holiday calendars, session bound
 Recommended Python stack:
 
 - `pandas`, `numpy` — data cleaning and statistical analysis.
-- `MetaTrader5` — broker/terminal data access where supported.
+- Manual MT5 CSV → Parquet import — **first approach on Mac M1**; `MetaTrader5` is a later Windows-based automation option.
 - `jupyterlab` — exploratory notebooks.
 - `backtesting` (**Backtesting.py**) — initial trade simulation and analytics.
 - `matplotlib` or `plotly` — equity curves, distributions, and trade plots.
@@ -149,7 +203,7 @@ A backtest must model or explicitly report its assumptions for:
 
 ### Performance evaluation
 
-Report at least: trade count, win rate, average R, expectancy **net of costs**, profit factor, maximum drawdown, equity curve, return variability, longest losing streak, average holding time, maximum favorable excursion (MFE) / maximum adverse excursion (MAE), exposure, and results by month/year/market regime.
+Report at least: trade count, win rate, average R, expectancy **net of costs**, profit factor, maximum drawdown, equity curve, return variability, longest losing streak, average holding time, MFE/MAE, exposure, and results by month/year/market regime.
 
 Use **chronological train/validation/test splits**, out-of-sample and walk-forward testing. Avoid choosing parameters on the final holdout sample. Compare with the baseline strategies, stress-test execution costs, and inspect sensitivity rather than only reporting the best parameter set. If many strategies are tried, account for selection/overfitting risk.
 
@@ -164,7 +218,7 @@ These are **configurable example account limits**, not current broker or FTMO co
 | Normal setup risk | **$25 per trade** |
 | A+ setup risk | **$35 per trade** |
 | Maximum trade attempts per session | **2** |
-| Absolute session risk ceiling | **$100** (1% of 10k\$ account balance)|
+| Absolute session risk ceiling | **$97** |
 | Trade management | TP1/TP2 partial exits; optional SL-to-BE test |
 
 Size positions from the stop distance and the symbol's verified monetary point value, e.g. `volume = risk_budget / (stop_distance × money_per_price_unit_per_lot)` before rounding to valid lot increments and checking costs and margin. **Do not assume “points” or lot values are consistent across assets.** Reject trades that violate the risk or execution constraints.
@@ -181,7 +235,7 @@ A production bot should:
 - Log signals, orders, fills, transaction costs, errors, and resulting P&L.
 - Alert on failures and require periodic oversight; “automated” does not mean risk-free or maintenance-free.
 
-**FTMO compatibility must be checked against the applicable account type and current rules before deployment**, including any algorithmic trading, daily loss, maximum loss, and prohibited-practice requirements. Start with **backtests → paper/demo forward tests → tightly controlled live deployment only if justified**. Do not use the FTMO verification account as the initial experiment.
+**FTMO compatibility must be checked against the applicable account type and current rules before deployment**, including any algorithmic trading, daily loss, maximum loss, and prohibited-practice requirements. Start with **backtests → paper/demo forward tests → tightly controlled live deployment only if justified**. Do not use the verification account as the initial experiment.
 
 ## 8. Proposed repository structure
 
@@ -214,7 +268,7 @@ The structure is **planned**; directories/modules should only be marked as imple
 
 ## 9. Development roadmap
 
-- [ ] **Phase 1 — Data:** obtain and validate at least 2–3 years of US100 intraday history if available; ensure the same 09:30–16:00 New York sessions are used throughout.
+- [ ] **Phase 1 — Data (Mac M1, manual first):** export US100 M5 candles from MT5 as CSV, import with pandas, validate the terminal timezone, and store Parquet. Target at least 2–3 years if available; ensure the same 09:30–16:00 New York sessions are used throughout. Add automated retrieval only if needed.
 - [ ] **Phase 2 — Descriptive ADR research:** quantify historical target-touch rates, first-touch sequencing, intraday excursions, and regime sensitivity.
 - [ ] **Phase 3 — Simple backtest:** implement long-only, short-only, and basic trend-filter variants with TP1/TP2, configurable stop, end-of-day exit, and realistic estimated costs.
 - [ ] **Phase 4 — Robustness:** evaluate walk-forward/out-of-sample performance, sensitivity to costs/parameters, baselines, and failure regimes.
