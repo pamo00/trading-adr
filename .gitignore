@@ -1,11 +1,13 @@
+# Python
 .venv/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 .ipynb_checkpoints/
-.DS_Store
 .env
 .env.*
+
+# Data
 data/
 data/raw/
 data/processed/
@@ -13,4 +15,9 @@ data/processed/
 !/data/.gitkeep
 !/data/raw/.gitkeep
 !/data/processed/.gitkeep
+
+# Results
 results/
+
+# macOS
+.DS_Store
