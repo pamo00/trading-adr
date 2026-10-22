@@ -6,6 +6,11 @@ __pycache__/
 .DS_Store
 .env
 .env.*
-data/raw/*.csv
-data/processed/*.csv
+data/*
+data/raw/*
+data/processed/*
+# Keep folder placeholders
+!/data/.gitkeep
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
 results/
